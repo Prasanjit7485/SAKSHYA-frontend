@@ -1,4 +1,6 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  "https://sakshya-backend.onrender.com";
 
 export function fileToBase64(file) {
   return new Promise((resolve, reject) => {
