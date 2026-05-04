@@ -1385,13 +1385,18 @@ export default function App() {
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState("");
   const [user, setUser] = useState(null);
-  const API_URL =
-  import.meta.env.VITE_API_URL || "http://localhost:5000";
+  const API_URL = import.meta.env.VITE_API_URL;
+
+if (!API_URL) {
+  console.warn("⚠️ VITE_API_URL not set. Using localhost (dev only).");
+}
+
+const BASE_URL = API_URL || "http://localhost:5000";
    // 🔹 Google login handler FIRST
   const handleCredentialResponse = async (response) => {
     const token = response.credential;
 
-    const res = await fetch(`${API_URL}/auth/google`, {
+    const res = await fetch(`${BASE_URL}/auth/google`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
