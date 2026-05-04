@@ -24,6 +24,8 @@ const SpeechRecognition =
     ? window.SpeechRecognition || window.webkitSpeechRecognition
     : null;
 
+
+
 function speak(text, lang = "en", onEnd) {
   if (!window.speechSynthesis) return;
 
@@ -36,7 +38,8 @@ function speak(text, lang = "en", onEnd) {
   let selectedVoice;
 
   if (lang === "hi") {
-    selectedVoice = voices.find(v => v.lang === "hi-IN");
+    selectedVoice = voices.find(v => v.lang === "hi-IN") 
+  || voices.find(v => v.lang.startsWith("hi"));
   } else {
     selectedVoice = voices.find(v => v.lang === "en-IN");
   }
@@ -79,7 +82,7 @@ export default function ChatAssistant({ judgmentData, C }) {
   const [error,      setError]      = useState("");
   const [lastFailed, setLastFailed] = useState(null); // stores message to retry
   const [lang, setLang] = useState("en"); // "en" or "hi"
-
+  const [voicesLoaded, setVoicesLoaded] = useState(false);
   const bottomRef   = useRef(null);
   const recognizerRef = useRef(null);
   const inputRef    = useRef(null);
@@ -103,6 +106,24 @@ export default function ChatAssistant({ judgmentData, C }) {
   useEffect(() => {
   window.speechSynthesis.onvoiceschanged = () => {
     console.log("Voices loaded:", window.speechSynthesis.getVoices());
+  };
+}, []);
+
+useEffect(() => {
+  const loadVoices = () => {
+    const voices = window.speechSynthesis.getVoices();
+    if (voices.length > 0) {
+      setVoicesLoaded(true);
+      console.log("Voices loaded:", voices);
+    }
+  };
+
+  loadVoices();
+
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+
+  return () => {
+    window.speechSynthesis.onvoiceschanged = null;
   };
 }, []);
 
@@ -145,9 +166,16 @@ export default function ChatAssistant({ judgmentData, C }) {
       if (!res.ok) throw new Error(json.error || "Server error");
 
       const assistantMsg = { role: "assistant", content: json.reply, ts: Date.now() };
-      setMessages(prev => [...prev, assistantMsg]);
+setMessages(prev => [...prev, assistantMsg]);
 
-      if (ttsEnabled) speak(json.reply, lang);
+// ✅ UPDATED TTS LOGIC
+if (ttsEnabled) {
+  if (voicesLoaded) {
+    speak(json.reply, lang);
+  } else {
+    setTimeout(() => speak(json.reply, lang), 300);
+  }
+}
     } catch (err) {
       // Remove the user message we optimistically added so retry is clean
       setMessages(prev => prev.slice(0, -1));
@@ -159,7 +187,7 @@ export default function ChatAssistant({ judgmentData, C }) {
     } finally {
       setLoading(false);
     }
-  }, [input, loading, messages, judgmentData, ttsEnabled]);
+  }, [input, loading, messages, judgmentData, ttsEnabled, voicesLoaded, lang]);
 
   // ─── voice input ───────────────────────────────────────────────────────────
   const toggleVoiceInput = useCallback(() => {
