@@ -29,17 +29,31 @@ function speak(text, lang = "en", onEnd) {
 
   window.speechSynthesis.cancel();
 
-  const utt = new SpeechSynthesisUtterance(text);
+  const utterance = new SpeechSynthesisUtterance(text);
 
-  utt.lang = lang === "hi" ? "hi-IN" : "en-IN";
-  utt.rate = 1;
-  utt.pitch = 1;
+  const voices = window.speechSynthesis.getVoices();
 
-  if (onEnd) utt.onend = onEnd;
+  let selectedVoice;
 
-  window.speechSynthesis.speak(utt);
+  if (lang === "hi") {
+    selectedVoice = voices.find(v => v.lang === "hi-IN");
+  } else {
+    selectedVoice = voices.find(v => v.lang === "en-IN");
+  }
+
+  // fallback if exact not found
+  if (!selectedVoice) {
+    selectedVoice = voices.find(v => v.lang.startsWith(lang));
+  }
+
+  if (selectedVoice) {
+    utterance.voice = selectedVoice;
+  }
+
+  utterance.lang = lang === "hi" ? "hi-IN" : "en-IN";
+
+  window.speechSynthesis.speak(utterance);
 }
-
 // ─── Quick suggestion chips shown when chat is empty ─────────────────────────
 const SUGGESTIONS = [
   "Summarise this judgment",
@@ -86,6 +100,11 @@ export default function ChatAssistant({ judgmentData, C }) {
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 120);
   }, [open]);
+  useEffect(() => {
+  window.speechSynthesis.onvoiceschanged = () => {
+    console.log("Voices loaded:", window.speechSynthesis.getVoices());
+  };
+}, []);
 
   // ─── send a message ────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (text) => {
