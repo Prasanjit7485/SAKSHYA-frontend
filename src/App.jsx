@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { analyzeJudgment } from "./api";
 import logo from "./assets/sakshya-logo.png";
 import img from "./assets/img.png";
-import ChatAssistant from "./components/ChatAssistant";
+import ChatAssistant from "./components/ChatAssistant.jsx";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
 const LIGHT = {
