@@ -5,27 +5,27 @@ import img from "./assets/img.png";
 import ChatAssistant from "./components/ChatAssistant.jsx";
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
-const LIGHT = {
-  bg: "#f4f5f7",
-  surface: "#ffffff",
+const WARM = {
+  bg: "#0d0506",
+  surface: "#180a0b",
   tricolor: "linear-gradient(90deg, #FF9933, #FFFFFF, #138808)",
-  card: "#ffffff",
-  border: "#e2e6ed",
-  accent: "#1a5cff",
-  accentSoft: "#1a5cff18",
-  textPrimary: "#0d1117",
-  textSecondary: "#4a5568",
-  textMuted: "#8a97a8",
+  card: "#1f0f12",
+  border: "#33181d",
+  accent: "#ff4b82",
+  accentSoft: "#ff4b8218",
+  textPrimary: "#fce8eb",
+  textSecondary: "#c4a7aa",
+  textMuted: "#87666a",
   success: "#10b981",
   warn: "#f59e0b",
   danger: "#ef4444",
-  navBg: "rgba(255,255,255,0.85)",
-  heroGrad: "linear-gradient(135deg, #f4f5f7 0%, #eef0ff 100%)",
-  blob1: "#c7d7ff",
-  blob2: "#d4f0e8",
-  blob3: "#fde8c8",
-  shadow: "0 2px 24px rgba(26,92,255,0.08)",
-  cardShadow: "0 1px 8px rgba(0,0,0,0.07)",
+  navBg: "rgba(13,5,6,0.88)",
+  heroGrad: "linear-gradient(135deg, #0d0506 0%, #1f080b 100%)",
+  blob1: "#661429",
+  blob2: "#4a1215",
+  blob3: "#2e0f1d",
+  shadow: "0 2px 40px rgba(255,75,130,0.12)",
+  cardShadow: "0 2px 20px rgba(0,0,0,0.5)",
 };
 
 const DARK = {
@@ -146,6 +146,14 @@ const GLOBAL_CSS = `
   @keyframes drawLine {
     from { stroke-dashoffset: 300; }
     to   { stroke-dashoffset: 0; }
+  }
+
+  @keyframes splashSequence {
+    0%   { transform: scale(1.2); opacity: 0; }
+    15%  { transform: scale(1.2); opacity: 1; }
+    60%  { transform: scale(1.1); opacity: 1; }
+    90%  { transform: scale(4); opacity: 0; }
+    100% { transform: scale(4); opacity: 0; }
   }
 
   .fade-up { animation: fadeUp 0.6s ease both; }
@@ -318,6 +326,37 @@ const GLOBAL_CSS = `
 `;
 
 // ─── Small reusable pieces (inline, no import) ────────────────────────────────
+function Reveal({ children, direction = "up", delay = 0 }) {
+  const ref = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setIsVisible(true);
+        observer.unobserve(entry.target);
+      }
+    }, { threshold: 0.1, rootMargin: "0px 0px -50px 0px" });
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, []);
+
+  let transform = "translateY(40px)";
+  if (direction === "left") transform = "translateX(-50px)";
+  if (direction === "right") transform = "translateX(50px)";
+  if (direction === "none") transform = "none";
+
+  return (
+    <div ref={ref} style={{
+      opacity: isVisible ? 1 : 0,
+      transform: isVisible ? "translate(0,0)" : transform,
+      transition: `opacity 0.7s cubic-bezier(0.4, 0, 0.2, 1) ${delay}s, transform 0.7s cubic-bezier(0.4, 0, 0.2, 1) ${delay}s`,
+      height: "100%", width: "100%"
+    }}>
+      {children}
+    </div>
+  );
+}
+
 function Badge({ children, color = "#3b7fff" }) {
   return (
     <span style={{
@@ -447,9 +486,20 @@ function HeroIllustration({ C }) {
 }
 
 // ─── Animated Background ──────────────────────────────────────────────────────
-function AnimatedBackground({ C }) {
+function AnimatedBackground({ C, theme }) {
   return (
     <div style={{ position: "fixed", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }}>
+      {theme === "warm" && (
+        <div style={{
+          position: "absolute", inset: 0,
+          backgroundImage: "url('/justice.png')",
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          opacity: 0.12,
+          mixBlendMode: "lighten",
+          zIndex: -1
+        }} />
+      )}
       {/* blobs */}
       <div style={{
         position: "absolute", width: 600, height: 600, borderRadius: "50%",
@@ -544,10 +594,17 @@ function Navbar({ theme, toggleTheme, C, onHome }) {
           </button>
         ))}
         <button onClick={toggleTheme} style={{
-          marginLeft: 8, background: C.accentSoft, border: `1px solid ${C.border}`,
-          borderRadius: 8, padding: "6px 12px", cursor: "pointer",
-          fontSize: 14, color: C.textSecondary,
-        }}>
+          marginLeft: 8,
+          background: "linear-gradient(135deg, #ff4b82, #ff7e5f, #ff9933)",
+          border: "none",
+          borderRadius: 12, padding: "8px 14px", cursor: "pointer",
+          fontSize: 14, color: "#fff",
+          boxShadow: "0 4px 15px rgba(255, 75, 130, 0.4)",
+          transition: "transform 0.2s, box-shadow 0.2s",
+        }}
+        onMouseOver={(e) => e.currentTarget.style.transform = "scale(1.05)"}
+        onMouseOut={(e) => e.currentTarget.style.transform = "scale(1)"}
+        >
           {theme === "dark" ? "☀️" : "🌙"}
         </button>
       </div>
@@ -697,21 +754,23 @@ function FeaturesSection({ C }) {
         </div>
         <div className="features-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
           {FEATURES.map((f, i) => (
-            <div key={i} className="feature-card" style={{
-              background: C.card, border: `1px solid ${C.border}`,
-              borderRadius: 16, padding: "28px 24px",
-              boxShadow: C.cardShadow,
-            }}>
-              <div style={{
-                width: 46, height: 46, borderRadius: 12, background: C.accentSoft,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 22, marginBottom: 16,
+            <Reveal key={i} direction={i % 3 === 0 ? "left" : i % 3 === 2 ? "right" : "up"} delay={(i % 3) * 0.1}>
+              <div className="feature-card" style={{
+                background: C.card, border: `1px solid ${C.border}`,
+                borderRadius: 16, padding: "28px 24px",
+                boxShadow: C.cardShadow, height: "100%"
               }}>
-                {f.icon}
+                <div style={{
+                  width: 46, height: 46, borderRadius: 12, background: C.accentSoft,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 22, marginBottom: 16,
+                }}>
+                  {f.icon}
+                </div>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>{f.title}</h3>
+                <p style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.7 }}>{f.desc}</p>
               </div>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>{f.title}</h3>
-              <p style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.7 }}>{f.desc}</p>
-            </div>
+            </Reveal>
           ))}
         </div>
       </div>
@@ -744,6 +803,7 @@ function UploadSection({ C, onFile, loading, progress, error, hidden }) {
 
   return (
     <section id="upload" style={{ padding: "80px 32px", position: "relative" }}>
+      <Reveal direction="up">
       <div style={{ maxWidth: 680, margin: "0 auto" }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <div style={{ fontSize: 11, color: C.accent, fontWeight: 800, letterSpacing: "0.15em", marginBottom: 10 }}>UPLOAD</div>
@@ -829,6 +889,7 @@ function UploadSection({ C, onFile, loading, progress, error, hidden }) {
           </div>
         )}
       </div>
+      </Reveal>
     </section>
   );
 }
@@ -1073,6 +1134,7 @@ function ResultsSection({ data, fileName, C, onReset }) {
 
   return (
     <section id="results" style={{ padding: "80px 32px 40px", position: "relative" }}>
+      <Reveal direction="left">
       <div style={{ maxWidth: 920, margin: "0 auto" }}>
         {/* back + download row */}
         <div style={{ display: "flex", gap: 10, marginBottom: 28, flexWrap: "wrap" }}>
@@ -1308,6 +1370,7 @@ function ResultsSection({ data, fileName, C, onReset }) {
           </div>
         )}
       </div>
+      </Reveal>
     </section>
   );
 }
@@ -1374,10 +1437,63 @@ function Footer({ C }) {
   );
 }
 
+// ─── Splash Screen ────────────────────────────────────────────────────────────
+function SplashScreen({ C, theme }) {
+  return (
+    <>
+      <style>{GLOBAL_CSS}</style>
+      <div style={{ height: "100vh", width: "100vw", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg, position: "relative", overflow: "hidden" }}>
+        <AnimatedBackground C={C} theme={theme} />
+        <div style={{ zIndex: 1, animation: "splashSequence 2.5s cubic-bezier(0.4, 0, 0.2, 1) forwards" }}>
+          <HeroIllustration C={C} />
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Login Screen ─────────────────────────────────────────────────────────────
+function LoginScreen({ C, theme, handleCredentialResponse }) {
+  useEffect(() => {
+    if (!window.google) return;
+    google.accounts.id.initialize({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      callback: handleCredentialResponse,
+    });
+    google.accounts.id.renderButton(
+      document.getElementById("googleSignInDiv"),
+      { theme: "outline", size: "large", type: "standard", shape: "pill", width: 250 }
+    );
+  }, [handleCredentialResponse]);
+
+  return (
+    <>
+      <style>{GLOBAL_CSS}</style>
+      <div style={{ height: "100vh", width: "100vw", display: "flex", alignItems: "center", justifyContent: "center", background: C.bg, position: "relative", overflow: "hidden" }}>
+        <AnimatedBackground C={C} theme={theme} />
+        <div className="fade-up" style={{ zIndex: 1, maxWidth: 420, width: "100%", padding: 32 }}>
+          <Card glow={`${C.accent}40`} C={C} style={{ textAlign: "center", padding: "48px 32px", background: `${C.surface}E6`, backdropFilter: "blur(24px)" }}>
+             <img src={logo} style={{ width: 64, marginBottom: 24, borderRadius: 12, boxShadow: `0 8px 24px ${C.accent}50` }} />
+             <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 28, fontWeight: 800, color: C.textPrimary, marginBottom: 8 }}>
+               Welcome to SAKSHYA
+             </h2>
+             <p style={{ color: C.textSecondary, fontSize: 14, marginBottom: 32, lineHeight: 1.6 }}>
+               Sign in to access the AI-Powered Judicial Intelligence System
+             </p>
+             <div style={{ display: "flex", justifyContent: "center" }}>
+               <div id="googleSignInDiv"></div>
+             </div>
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Root App ─────────────────────────────────────────────────────────────────
 export default function App() {
   const [theme, setTheme] = useState("dark");
-  const C = theme === "dark" ? DARK : LIGHT;
+  const C = theme === "dark" ? DARK : WARM;
 
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1385,44 +1501,34 @@ export default function App() {
   const [error, setError] = useState(null);
   const [progress, setProgress] = useState("");
   const [user, setUser] = useState(null);
-  const API_URL = import.meta.env.VITE_API_URL;
+  const [showSplash, setShowSplash] = useState(true);
 
-if (!API_URL) {
-  console.warn("⚠️ VITE_API_URL is not set. Using localhost (dev only).");
-}
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 2500);
+    return () => clearTimeout(timer);
+  }, []);
 
-const BASE_URL = API_URL || "http://localhost:5000";
+  const API_URL =
+  import.meta.env.VITE_API_BASE_URL || "https://sakshya-backend.onrender.com";
    // 🔹 Google login handler FIRST
-  const handleCredentialResponse = async (response) => {
+  const handleCredentialResponse = useCallback((response) => {
     const token = response.credential;
 
-    const res = await fetch(`${BASE_URL}/auth/google`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ token }),
-    });
+    try {
+      // Decode the JWT token to get user info without needing a backend endpoint yet
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
 
-    const data = await res.json();
-    setUser(data.user);
-    localStorage.setItem("token", data.token);
-  };
-
-  // 🔹 THEN useEffect
-  useEffect(() => {
-  if (!window.google || user) return;
-
-  google.accounts.id.initialize({
-    client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-    callback: handleCredentialResponse,
-  });
-
-  google.accounts.id.renderButton(
-    document.getElementById("googleSignInDiv"),
-    { theme: "outline", size: "large" }
-  );
-}, [user]);
+      const decodedUser = JSON.parse(jsonPayload);
+      setUser(decodedUser);
+      localStorage.setItem("token", token);
+    } catch (e) {
+      console.error("Failed to decode Google token", e);
+    }
+  }, []);
 
   const handleFile = async (f) => {
     setFile(f);
@@ -1454,37 +1560,24 @@ const BASE_URL = API_URL || "http://localhost:5000";
   };
 
   const scrollToUpload = () => document.getElementById("upload")?.scrollIntoView({ behavior: "smooth" });
+  if (showSplash) {
+    return <SplashScreen C={C} theme={theme} />;
+  }
+
    // ✅ LOGIN GATE (PUT HERE)
   if (!user) {
-    return (
-      <div style={{
-        height: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        background: C.bg,
-        color: C.textPrimary
-      }}>
-        <img src={logo} style={{ width: 80, marginBottom: 20 }} />
-        <h2>Welcome to SAKSHYA</h2>
-        <p style={{ color: C.textSecondary }}>Sign in to continue</p>
-
-        {/* 👇 THIS DIV IS REQUIRED */}
-        <div id="googleSignInDiv"></div>
-      </div>
-    );
+    return <LoginScreen C={C} theme={theme} handleCredentialResponse={handleCredentialResponse} />;
   }
 
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.textPrimary, position: "relative" }}>
       <style>{GLOBAL_CSS}</style>
 
-      <AnimatedBackground C={C} />
+      <AnimatedBackground C={C} theme={theme} />
 
       {/* All sections sit above background */}
       <div style={{ position: "relative", zIndex: 1 }}>
-        <Navbar theme={theme} toggleTheme={() => setTheme(t => t === "dark" ? "light" : "dark")} C={C} onHome={goHome} />
+        <Navbar theme={theme} toggleTheme={() => setTheme(t => t === "dark" ? "warm" : "dark")} C={C} onHome={goHome} />
 
         {/* Show hero + features only when no result */}
         {!result && (
