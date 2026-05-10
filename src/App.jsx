@@ -3,8 +3,8 @@ import { analyzeJudgment } from "./api";
 import logo from "./assets/sakshya-logo.png";
 import img from "./assets/img.png";
 import ChatAssistant from "./components/ChatAssistant.jsx";
+import LegalPage from "./LegalPage.jsx";
 import Dashboard from "./components/Dashboard";
-
 
 
 // ─── Theme ────────────────────────────────────────────────────────────────────
@@ -618,9 +618,18 @@ function AnimatedBackground({ C, theme }) {
 // ─── Navbar ───────────────────────────────────────────────────────────────────
 function Navbar({ theme, toggleTheme, C, onHome }) {
   const scrollTo = (id) => {
-    if (id === "home") { onHome?.(); return; }
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-  };
+  if (id === "home") {
+    onHome?.();
+    return;
+  }
+
+  if (id === "legal") {
+    document.getElementById("legal-section")?.scrollIntoView({ behavior: "smooth" });
+    return;
+  }
+
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+};
   return (
     <nav style={{
       position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
@@ -665,12 +674,12 @@ function Navbar({ theme, toggleTheme, C, onHome }) {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-         {["home", "dashboard", "features", "upload", "results", "contact"].map((id) => (
-  <button key={id} className="nav-link" onClick={() => scrollTo(id)}
-    style={{ color: C.textSecondary, padding: "6px 10px" }}>
-    {id.charAt(0).toUpperCase() + id.slice(1)}
-  </button>
-))}
+        {["home", "features", "upload", "results", "contact"].map((id) => (
+          <button key={id} className="nav-link" onClick={() => scrollTo(id)}
+            style={{ color: C.textSecondary, padding: "6px 10px" }}>
+            {id.charAt(0).toUpperCase() + id.slice(1)}
+          </button>
+        ))}
         <button onClick={toggleTheme} style={{
           marginLeft: 8,
           background: "linear-gradient(135deg, #ff4b82, #ff7e5f, #ff9933)",
@@ -969,6 +978,7 @@ function UploadSection({ C, onFile, loading, progress, error, hidden }) {
       </div>
       </Reveal>
     </section>
+    
   );
 }
 
@@ -1138,32 +1148,471 @@ function downloadPDFReport(data, fileName) {
   };
 }
 
+// ─── Timeline Generator ───────────────────────────────────────────────────────
+function Timeline({ dates, C }) {
+  if (!dates?.length) return <div style={{ color: C.textMuted, fontSize: 13 }}>No specific dates extracted.</div>;
+  return (
+    <div style={{ position: "relative", paddingLeft: 16, marginTop: 8 }}>
+      <div style={{ position: "absolute", top: 4, bottom: 4, left: 3, width: 2, background: C.border }} />
+      {dates.map((d, i) => (
+        <div key={i} style={{ position: "relative", marginBottom: 16 }}>
+          <div style={{
+            position: "absolute", left: -18, top: 4, width: 10, height: 10,
+            borderRadius: "50%", background: C.surface, border: `2px solid ${C.accent}`,
+            zIndex: 1, boxShadow: `0 0 8px ${C.accent}40`
+          }} />
+          <div style={{ fontSize: 13, color: C.warn, fontWeight: 700, marginBottom: 2 }}>{d.date}</div>
+          <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.4 }}>{d.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Risk Meter ───────────────────────────────────────────────────────────────
+function RiskMeter({ score, C }) {
+  const normalizedScore = Math.min(100, Math.max(0, score));
+  let color = "#10b981"; // green
+  let label = "Low Risk";
+  if (normalizedScore > 30) { color = "#f59e0b"; label = "Medium Risk"; }
+  if (normalizedScore > 70) { color = "#ef4444"; label = "High Risk"; }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "16px 20px", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12 }}>
+      <div style={{ position: "relative", width: 60, height: 60, flexShrink: 0 }}>
+        <svg viewBox="0 0 36 36" style={{ width: "100%", height: "100%", transform: "rotate(-90deg)" }}>
+          <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke={C.border} strokeWidth="3" />
+          <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke={color} strokeWidth="3" strokeDasharray={`${normalizedScore}, 100`} style={{ transition: "stroke-dasharray 1s ease-out" }} />
+        </svg>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800, color: C.textPrimary }}>
+          {normalizedScore}
+        </div>
+      </div>
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 800, color: C.textMuted, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>Overall Risk Score</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color }}>{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function calculateRiskScore(data) {
+  let score = 0;
+  if (data.riskFlags) {
+    data.riskFlags.forEach(r => {
+      if (r.severity === "high") score += 20;
+      else if (r.severity === "medium") score += 10;
+      else score += 5;
+    });
+  }
+  if (data.keyDirectives) {
+    data.keyDirectives.forEach(d => {
+      if (d.priority === "critical") score += 15;
+      else if (d.priority === "high") score += 5;
+    });
+  }
+  return score;
+}
+
+// ─── Voice Summary Button — with EN/HI toggle ────────────────────────────────
+function VoiceButton({ data, C }) {
+  const [status, setStatus] = useState("idle"); // idle | loading | playing | paused | error
+  const [lang,   setLang]   = useState("en");   // "en" | "hi"
+  const audioRef   = useRef(null);
+  const blobUrlRef = useRef(null);
+
+  const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://sakshya-backend.onrender.com";
+
+  // ── Clean up audio resources ──────────────────────────────────────────────
+  const stop = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
+      audioRef.current = null;
+    }
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    setStatus("idle");
+  };
+
+  // ── Play / pause handler ──────────────────────────────────────────────────
+  const handlePlay = async () => {
+    if (audioRef.current) {
+      if (status === "playing") { audioRef.current.pause(); setStatus("paused"); return; }
+      if (status === "paused")  { audioRef.current.play();  setStatus("playing"); return; }
+    }
+    if (status === "loading") return;
+
+    setStatus("loading");
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${BASE_URL}/api/voice/summary`, {
+        method:  "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ data, lang }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || `Server error ${res.status}`);
+      }
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      blobUrlRef.current = url;
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(url);
+        blobUrlRef.current = null;
+        audioRef.current   = null;
+        setStatus("idle");
+      };
+      audio.onerror = () => setStatus("error");
+      await audio.play();
+      setStatus("playing");
+    } catch (e) {
+      console.error("[VoiceButton]", e);
+      setStatus("error");
+      setTimeout(() => setStatus("idle"), 3500);
+    }
+  };
+
+  // ── Toggle language — stop current audio ─────────────────────────────────
+  const toggleLang = () => { stop(); setLang(l => l === "en" ? "hi" : "en"); };
+
+  const isActive  = status === "playing" || status === "paused";
+  const playLabel = {
+    idle:    lang === "hi" ? "🎧 सुनें"           : "🎧 Play Summary",
+    loading: lang === "hi" ? "⏳ तैयार हो रहा है…" : "⏳ Generating…",
+    playing: lang === "hi" ? "⏸ रोकें"            : "⏸ Pause",
+    paused:  lang === "hi" ? "▶️ जारी रखें"       : "▶️ Resume",
+    error:   "❌ Retry",
+  }[status];
+
+  const btnBg     = status === "error"  ? `${C.danger}20`
+                  : status === "playing" ? `${C.success}20`
+                  : `${C.accent}15`;
+  const btnBorder = status === "error"  ? C.danger
+                  : status === "playing" ? C.success
+                  : C.accent;
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+
+      {/* Language toggle */}
+      <div style={{
+        display: "flex", borderRadius: 8, overflow: "hidden",
+        border: `1px solid ${C.border}`, flexShrink: 0,
+      }}>
+        {["en", "hi"].map(l => (
+          <button key={l} onClick={toggleLang} disabled={status === "loading"} style={{
+            background: lang === l ? `${C.accent}25` : "transparent",
+            color:      lang === l ? C.accent : C.textMuted,
+            border:     "none", padding: "4px 10px", fontSize: 11,
+            fontWeight: lang === l ? 800 : 500, cursor: "pointer",
+            fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s",
+          }}>
+            {l === "en" ? "EN" : "हि"}
+          </button>
+        ))}
+      </div>
+
+      {/* Play / pause */}
+      <button onClick={handlePlay} disabled={status === "loading"} style={{
+        background: btnBg, border: `1px solid ${btnBorder}50`,
+        borderRadius: 9, padding: "6px 14px",
+        cursor: status === "loading" ? "not-allowed" : "pointer",
+        color: btnBorder, fontSize: 12, fontWeight: 700,
+        fontFamily: "'DM Sans', sans-serif",
+        display: "flex", alignItems: "center", gap: 6,
+        opacity: status === "loading" ? 0.7 : 1, transition: "all 0.2s", flexShrink: 0,
+      }}>
+        {status === "loading" && (
+          <span style={{
+            width: 10, height: 10,
+            border: `2px solid ${C.accent}40`, borderTopColor: C.accent,
+            borderRadius: "50%", display: "inline-block",
+            animation: "spinSlow 0.8s linear infinite",
+          }} />
+        )}
+        {playLabel}
+      </button>
+
+      {/* Stop */}
+      {isActive && (
+        <button onClick={stop} style={{
+          background: `${C.danger}15`, border: `1px solid ${C.danger}40`,
+          borderRadius: 8, padding: "5px 10px", cursor: "pointer",
+          color: C.danger, fontSize: 11, fontWeight: 700,
+          fontFamily: "'DM Sans', sans-serif", flexShrink: 0,
+        }}>⏹ Stop</button>
+      )}
+
+      {/* Hindi generation note */}
+      {status === "loading" && lang === "hi" && (
+        <span style={{ fontSize: 10, color: C.textMuted, fontStyle: "italic" }}>
+          (translating…)
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ─── Legal Section ────────────────────────────────────────────────────────────
+function LegalSection({ C }) {
+  return (
+    <section id="legal-section" style={{ padding: "80px 32px" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+        <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 32, color: C.textPrimary, marginBottom: 20 }}>
+          ⚖️ Legal Assistant
+        </h2>
+        <div style={{ borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}` }}>
+          <LegalPage />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── Copy Button (with visual feedback) ──────────────────────────────────────
+function CopyButton({ text, C }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.focus(); ta.select();
+      try { document.execCommand("copy"); } catch {}
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <button onClick={handleCopy} style={{
+      background:   copied ? `${C.success}20` : `${C.accent}15`,
+      border:       `1px solid ${copied ? C.success : C.accent}40`,
+      borderRadius:  7, padding: "4px 10px", cursor: "pointer",
+      color:         copied ? C.success : C.accent,
+      fontSize: 11, fontWeight: 700, fontFamily: "'DM Sans', sans-serif",
+      display: "flex", alignItems: "center", gap: 4,
+      transition: "all 0.2s", flexShrink: 0, whiteSpace: "nowrap",
+    }}>
+      {copied ? "✅ Copied!" : "📋 Copy"}
+    </button>
+  );
+}
+
+// ─── Negotiation Tab ──────────────────────────────────────────────────────────
+function NegotiationTab({ data, C }) {
+  const items = data.negotiationCheatSheet || [];
+
+  if (!items.length) {
+    return (
+      <div style={{ textAlign: "center", padding: "60px 24px" }}>
+        <div style={{ fontSize: 40, marginBottom: 16 }}>🤝</div>
+        <div style={{ fontSize: 15, color: C.textPrimary, fontWeight: 700, marginBottom: 8 }}>
+          No Negotiation Data Found
+        </div>
+        <div style={{ fontSize: 13, color: C.textMuted, lineHeight: 1.7, maxWidth: 380, margin: "0 auto" }}>
+          Re-analyze the document to generate counter-arguments. The judgment must contain
+          clauses that impose obligations or penalties on a party.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fade-in">
+      {/* Info banner */}
+      <div style={{
+        background: `${C.warn}10`, border: `1px solid ${C.warn}30`,
+        borderRadius: 12, padding: "12px 16px", marginBottom: 20,
+        fontSize: 13, color: C.textSecondary, lineHeight: 1.6,
+        display: "flex", alignItems: "flex-start", gap: 10,
+      }}>
+        <span style={{ fontSize: 18, flexShrink: 0 }}>🤝</span>
+        <span>
+          <strong style={{ color: C.textPrimary }}>Negotiation Cheat Sheet</strong>
+          {" "}— AI-identified high-risk clauses from this judgment with plain-English
+          counter-arguments. Copy any suggestion directly to share with your advocate.
+        </span>
+      </div>
+
+      {items.map((item, i) => {
+        const sc = item.severity === "high"   ? "#ef4444"
+                 : item.severity === "medium" ? "#f59e0b"
+                 : "#10b981";
+        const severityIcon = item.severity === "high" ? "🔴"
+                           : item.severity === "medium" ? "🟡" : "🟢";
+        return (
+          <div key={i} style={{
+            background: C.surface, border: `1px solid ${C.border}`,
+            borderLeft: `3px solid ${sc}`, borderRadius: 12,
+            marginBottom: 14, overflow: "hidden",
+          }}>
+            {/* Header — same layout as DirectiveCard */}
+            <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{
+                minWidth: 28, height: 28, borderRadius: "50%",
+                background: `${sc}20`, display: "flex", alignItems: "center",
+                justifyContent: "center", fontSize: 11, fontWeight: 800,
+                color: sc, flexShrink: 0,
+              }}>{i + 1}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.textPrimary, marginBottom: 4, lineHeight: 1.3 }}>
+                  {item.clauseTitle || `Clause ${i + 1}`}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, color: sc,
+                    background: `${sc}15`, border: `1px solid ${sc}30`,
+                    borderRadius: 10, padding: "2px 9px",
+                    letterSpacing: "0.06em", textTransform: "uppercase",
+                  }}>
+                    {severityIcon} {item.severity === "high" ? "High Risk" : item.severity === "medium" ? "Medium Risk" : "Low Risk"}
+                  </span>
+                  {item.relevantLaw && (
+                    <span style={{
+                      fontSize: 10, fontWeight: 600, color: C.accent,
+                      background: `${C.accent}12`, border: `1px solid ${C.accent}30`,
+                      borderRadius: 10, padding: "2px 9px",
+                    }}>📜 {item.relevantLaw}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: "0 16px 16px", borderTop: `1px solid ${C.border}` }}>
+              {/* Original clause */}
+              <div style={{ marginTop: 14, marginBottom: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 800, color: C.textMuted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
+                  📄 Original Clause
+                </div>
+                <div style={{
+                  background: `${sc}08`, border: `1px solid ${sc}25`,
+                  borderRadius: 9, padding: "10px 14px",
+                  fontSize: 13, color: C.textPrimary, lineHeight: 1.75, fontStyle: "italic",
+                }}>
+                  "{item.originalClause}"
+                </div>
+              </div>
+
+              {/* Why risky — styled like a RiskFlag row */}
+              {item.risk && (
+                <div style={{
+                  display: "flex", gap: 10, alignItems: "flex-start",
+                  padding: "10px 14px", background: `${sc}10`,
+                  borderRadius: 9, marginBottom: 12, border: `1px solid ${sc}30`,
+                }}>
+                  <span style={{ fontSize: 14, flexShrink: 0 }}>⚠️</span>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 800, color: sc, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
+                      Why It's Risky
+                    </div>
+                    <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.65 }}>{item.risk}</div>
+                  </div>
+                </div>
+              )}
+
+              {/* Counter-argument — copyable green box */}
+              <div style={{
+                background: `${C.success}08`, border: `1px solid ${C.success}30`,
+                borderRadius: 9, padding: "12px 14px",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10, gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 10, fontWeight: 800, color: C.success, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    ✅ Counter-Argument / Suggested Change
+                  </div>
+                  <CopyButton text={item.suggestedChange} C={C} />
+                </div>
+                <div style={{ fontSize: 13, color: C.textPrimary, lineHeight: 1.75 }}>
+                  {item.suggestedChange}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Disclaimer */}
+      <div style={{
+        marginTop: 16, padding: "10px 16px",
+        background: C.card, border: `1px solid ${C.border}`,
+        borderRadius: 10, fontSize: 11, color: C.textMuted,
+        textAlign: "center", lineHeight: 1.6,
+      }}>
+        ⚖️ For informational purposes only. Consult a licensed advocate before using any counter-argument in legal proceedings.
+      </div>
+    </div>
+  );
+}
+
 // ─── Results Section ──────────────────────────────────────────────────────────
-function DirectiveCard({ d, index, C }) {
+function DirectiveCard({ d, index, C, fileKey }) {
   const pc = PRIORITY_COLORS[d.priority] || C.textMuted;
+  const storageKey = `sakshya_checklist_${fileKey}_${index}`;
+  const [status, setStatus] = useState(() => localStorage.getItem(storageKey) || "Pending");
+
+  const handleStatusChange = (newStatus) => {
+    setStatus(newStatus);
+    localStorage.setItem(storageKey, newStatus);
+  };
+
+  const isCompleted = status === "Completed";
+
   return (
     <div style={{
-      background: C.surface, border: `1px solid ${C.border}`,
-      borderLeft: `3px solid ${pc}`, borderRadius: 12,
+      background: isCompleted ? `${C.surface}80` : C.surface, 
+      border: `1px solid ${isCompleted ? C.success + '40' : C.border}`,
+      borderLeft: `3px solid ${isCompleted ? C.success : pc}`, 
+      borderRadius: 12,
       padding: "14px 16px", marginBottom: 10,
+      opacity: isCompleted ? 0.8 : 1,
+      transition: "all 0.2s"
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
         <div style={{
           minWidth: 24, height: 24, borderRadius: "50%",
-          background: `${pc}22`, display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 10, fontWeight: 800, color: pc, flexShrink: 0,
+          background: isCompleted ? `${C.success}22` : `${pc}22`, 
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: 10, fontWeight: 800, color: isCompleted ? C.success : pc, flexShrink: 0,
         }}>
-          {index}
+          {isCompleted ? "✓" : index}
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-            {d.priority && <Badge color={pc}>{d.priority}</Badge>}
-            {d.category && <Badge color={C.accent}>{d.category}</Badge>}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {d.priority && <Badge color={isCompleted ? C.success : pc}>{d.priority}</Badge>}
+              {d.category && <Badge color={C.accent}>{d.category}</Badge>}
+            </div>
+            
+            {/* Action Checklist Toggle */}
+            <div style={{ display: "flex", background: `${C.bg}80`, borderRadius: 8, overflow: "hidden", border: `1px solid ${C.border}` }}>
+              {["Pending", "In Progress", "Completed"].map(opt => (
+                <button key={opt} onClick={() => handleStatusChange(opt)} style={{
+                  background: status === opt ? (opt === "Completed" ? C.success : opt === "In Progress" ? C.warn : C.textMuted) + "22" : "transparent",
+                  color: status === opt ? (opt === "Completed" ? C.success : opt === "In Progress" ? C.warn : C.textPrimary) : C.textSecondary,
+                  border: "none", padding: "4px 10px", fontSize: 11, fontWeight: status === opt ? 700 : 500,
+                  cursor: "pointer", transition: "all 0.2s"
+                }}>
+                  {opt === "Completed" ? "✓ " : ""}{opt}
+                </button>
+              ))}
+            </div>
           </div>
-          <p style={{ margin: 0, fontSize: 13.5, color: C.textPrimary, lineHeight: 1.65 }}>{d.directive}</p>
+          <p style={{ margin: 0, fontSize: 13.5, color: isCompleted ? C.textSecondary : C.textPrimary, lineHeight: 1.65, textDecoration: isCompleted ? "line-through" : "none" }}>{d.directive}</p>
           <div style={{ marginTop: 8, display: "flex", gap: 16, flexWrap: "wrap" }}>
             {d.deadline && (
-              <span style={{ fontSize: 11, color: C.warn }}>⏰ Deadline: <strong>{d.deadline}</strong></span>
+              <span style={{ fontSize: 11, color: isCompleted ? C.textMuted : C.warn }}>⏰ Deadline: <strong>{d.deadline}</strong></span>
             )}
             {d.authority && (
               <span style={{ fontSize: 11, color: C.textSecondary }}>🏛️ {d.authority}</span>
@@ -1202,12 +1651,14 @@ function ResultsSection({ data, fileName, C, onReset }) {
   const high = data.keyDirectives?.filter((d) => d.priority === "high").length || 0;
   const outcome = OUTCOME_MAP[data.outcome] || OUTCOME_MAP.unknown;
   const appeal = APPEAL_MAP[data.appealRecommendation] || APPEAL_MAP.unclear;
+  const riskScore = calculateRiskScore(data);
 
   const tabs = [
-    { id: "overview", label: "Overview", icon: "📊" },
-    { id: "directives", label: `Directives (${data.keyDirectives?.length || 0})`, icon: "📋" },
-    { id: "risks", label: `Risk Flags (${data.riskFlags?.length || 0})`, icon: "⚠️" },
-    { id: "details", label: "Details", icon: "🔍" },
+    { id: "overview",    label: "Overview",                                         icon: "📊" },
+    { id: "directives",  label: `Directives (${data.keyDirectives?.length || 0})`,  icon: "📋" },
+    { id: "risks",       label: `Risk Flags (${data.riskFlags?.length || 0})`,      icon: "⚠️" },
+    { id: "cheatsheet",  label: `Negotiation (${data.negotiationCheatSheet?.length || 0})`, icon: "🤝" }, // ← ADD
+    { id: "details",     label: "Details",                                          icon: "🔍" },
   ];
 
   return (
@@ -1305,8 +1756,14 @@ function ResultsSection({ data, fileName, C, onReset }) {
         {/* ── OVERVIEW TAB ── */}
         {tab === "overview" && (
           <div className="fade-in">
+            <div style={{ marginBottom: 18 }}>
+               <RiskMeter score={riskScore} C={C} />
+            </div>
             <Card style={{ marginBottom: 18 }} glow={`${C.accent}22`} C={C}>
-              <SectionTitle icon="📝" title="Judgment Summary" C={C} />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
+                <SectionTitle icon="📝" title="Judgment Summary" C={C} />
+                <VoiceButton data={data} C={C} />
+              </div>
               <p style={{ margin: 0, fontSize: 14, color: C.textPrimary, lineHeight: 1.8 }}>
                 {data.summary || "No summary available."}
               </p>
@@ -1333,15 +1790,7 @@ function ResultsSection({ data, fileName, C, onReset }) {
               </Card>
               <Card C={C}>
                 <SectionTitle icon="📅" title="Critical Dates" C={C} />
-                {data.criticalDates?.length
-                  ? data.criticalDates.map((d, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", marginBottom: 7, fontSize: 13 }}>
-                      <span style={{ color: C.textSecondary }}>{d.label}</span>
-                      <span style={{ color: C.warn, fontWeight: 600 }}>{d.date}</span>
-                    </div>
-                  ))
-                  : <div style={{ color: C.textMuted, fontSize: 13 }}>No specific dates extracted.</div>
-                }
+                <Timeline dates={data.criticalDates} C={C} />
               </Card>
             </div>
             <Card glow={data.complianceRequired ? "#ef444422" : undefined} C={C}>
@@ -1376,7 +1825,7 @@ function ResultsSection({ data, fileName, C, onReset }) {
                   const ord = { critical: 0, high: 1, medium: 2, low: 3 };
                   return (ord[a.priority] ?? 4) - (ord[b.priority] ?? 4);
                 })
-                .map((d, i) => <DirectiveCard key={d.id || i} d={d} index={i + 1} C={C} />)
+                .map((d, i) => <DirectiveCard key={d.id || i} d={d} index={i + 1} C={C} fileKey={data.caseNumber || fileName} />)
               : <div style={{ textAlign: "center", color: C.textMuted, padding: 48, fontSize: 14 }}>No directives extracted.</div>
             }
           </div>
@@ -1385,12 +1834,17 @@ function ResultsSection({ data, fileName, C, onReset }) {
         {/* ── RISKS TAB ── */}
         {tab === "risks" && (
           <div className="fade-in">
+            <div style={{ marginBottom: 24 }}>
+               <RiskMeter score={riskScore} C={C} />
+            </div>
             {data.riskFlags?.length
               ? data.riskFlags.map((r, i) => <RiskFlag key={i} {...r} C={C} />)
               : <div style={{ textAlign: "center", color: C.textMuted, padding: 48, fontSize: 14 }}>✅ No significant risk flags identified.</div>
             }
           </div>
         )}
+        {/* ── NEGOTIATION CHEAT SHEET TAB ── */}
+        {tab === "cheatsheet" && <NegotiationTab data={data} C={C} />}
 
         {/* ── DETAILS TAB ── */}
         {tab === "details" && (
@@ -1729,8 +2183,8 @@ export default function App() {
         {!result && (
   <>
     <HeroSection C={C} onUploadClick={scrollToUpload} />
-    <Dashboard C={C} />           {/* ← ADD THIS LINE */}
     <FeaturesSection C={C} />
+    <LegalSection C={C} />
   </>
 )}
 
