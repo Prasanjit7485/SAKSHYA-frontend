@@ -106,7 +106,7 @@ export default function ChatAssistant({ judgmentData, C }) {
   const [lastFailed, setLastFailed] = useState(null);
   const [lang,       setLang]       = useState("en");
 
-  const bottomRef     = useRef(null);
+  const chatContainerRef = useRef(null);
   const recognizerRef = useRef(null);
   const inputRef      = useRef(null);
 
@@ -119,7 +119,12 @@ export default function ChatAssistant({ judgmentData, C }) {
 
   // ── auto-scroll ────────────────────────────────────────────────────────────
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: "smooth"
+      });
+    }
   }, [messages, open]);
 
   // ── focus input on open ────────────────────────────────────────────────────
@@ -357,10 +362,13 @@ export default function ChatAssistant({ judgmentData, C }) {
           </div>
 
           {/* ── MESSAGES ── */}
-          <div style={{
-            flex: 1, overflowY: "auto", padding: "16px 14px",
-            display: "flex", flexDirection: "column", gap: 10,
-          }}>
+          <div 
+            ref={chatContainerRef}
+            style={{
+              flex: 1, overflowY: "auto", padding: "16px 14px",
+              display: "flex", flexDirection: "column", gap: 10,
+            }}
+          >
             {messages.length === 0 ? (
               <div style={{ textAlign: "center", marginTop: 20 }}>
                 <div style={{ fontSize: 32, marginBottom: 10 }}>⚖️</div>
@@ -443,7 +451,6 @@ export default function ChatAssistant({ judgmentData, C }) {
               </div>
             )}
 
-            <div ref={bottomRef} />
           </div>
 
           {/* ── INPUT BAR ── */}
