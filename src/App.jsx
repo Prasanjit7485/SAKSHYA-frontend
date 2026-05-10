@@ -674,7 +674,7 @@ function Navbar({ theme, toggleTheme, C, onHome }) {
         </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        {["home", "features", "upload", "results", "contact"].map((id) => (
+        {["home","dashboard", "features", "upload", "results", "contact"].map((id) => (
           <button key={id} className="nav-link" onClick={() => scrollTo(id)}
             style={{ color: C.textSecondary, padding: "6px 10px" }}>
             {id.charAt(0).toUpperCase() + id.slice(1)}
@@ -1657,7 +1657,7 @@ function ResultsSection({ data, fileName, C, onReset }) {
     { id: "overview",    label: "Overview",                                         icon: "📊" },
     { id: "directives",  label: `Directives (${data.keyDirectives?.length || 0})`,  icon: "📋" },
     { id: "risks",       label: `Risk Flags (${data.riskFlags?.length || 0})`,      icon: "⚠️" },
-    { id: "cheatsheet",  label: `Negotiation (${data.negotiationCheatSheet?.length || 0})`, icon: "🤝" }, // ← ADD
+    { id: "cheatsheet",  label: `Negotiation (${data.negotiationCheatSheet?.length || 0})`, icon: "🤝" },
     { id: "details",     label: "Details",                                          icon: "🔍" },
   ];
 
@@ -1709,7 +1709,6 @@ function ResultsSection({ data, fileName, C, onReset }) {
 
         {/* stats row */}
         <div className="stats-row" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 28 }}>
-          
           {[
             { label: "Total Directives", value: data.keyDirectives?.length || 0, color: C.accent },
             { label: "🚨 Critical", value: critical, color: "#ef4444" },
@@ -1843,6 +1842,7 @@ function ResultsSection({ data, fileName, C, onReset }) {
             }
           </div>
         )}
+
         {/* ── NEGOTIATION CHEAT SHEET TAB ── */}
         {tab === "cheatsheet" && <NegotiationTab data={data} C={C} />}
 
@@ -2149,8 +2149,6 @@ export default function App() {
 
   const reset = () => { setResult(null); setFile(null); setError(null); };
 
-  // inside your JSX, add a new section:
-
   const goHome = () => {
     reset();
     setTimeout(() => {
@@ -2159,6 +2157,7 @@ export default function App() {
   };
 
   const scrollToUpload = () => document.getElementById("upload")?.scrollIntoView({ behavior: "smooth" });
+
   if (showSplash) {
     return <SplashScreen C={C} theme={theme} isLoaded={imagesLoaded} loadProgress={loadProgress} />;
   }
@@ -2179,14 +2178,15 @@ export default function App() {
       <div style={{ position: "relative", zIndex: 1 }}>
         <Navbar theme={theme} toggleTheme={() => setTheme(t => t === "dark" ? "warm" : "dark")} C={C} onHome={goHome} />
         
-        {/* Show hero + features only when no result */}
+        {/* ── Only show hero + dashboard + features + legal when no result ── */}
         {!result && (
-  <>
-    <HeroSection C={C} onUploadClick={scrollToUpload} />
-    <FeaturesSection C={C} />
-    <LegalSection C={C} />
-  </>
-)}
+          <>
+            <HeroSection C={C} onUploadClick={scrollToUpload} />
+            <Dashboard C={C} />
+            <FeaturesSection C={C} />
+            <LegalSection C={C} />
+          </>
+        )}
 
         <UploadSection
           C={C}
@@ -2220,10 +2220,10 @@ export default function App() {
 
         <Footer C={C} />
         
-                {/* ── AI Chat Assistant (floating bubble) ── */}
-                <ChatAssistant judgmentData={result} C={C} />
+        {/* ── AI Chat Assistant (floating bubble) ── */}
+        <ChatAssistant judgmentData={result} C={C} />
         
-              </div>
-            </div>
+      </div>
+    </div>
   );
 }
