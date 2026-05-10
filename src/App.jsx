@@ -1218,35 +1218,47 @@ function calculateRiskScore(data) {
 function VoiceButton({ data, C }) {
   const [status, setStatus] = useState("idle"); // idle | loading | playing | paused | error
   const [lang,   setLang]   = useState("en");   // "en" | "hi"
-  const audioRef   = useRef(null);
-  const blobUrlRef = useRef(null);
 
   const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://sakshya-backend.onrender.com";
 
-  // ── Clean up audio resources ──────────────────────────────────────────────
-  const stop = () => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.onended = null;
-      audioRef.current.onerror = null;
-      audioRef.current = null;
+  // Preload voices
+  useEffect(() => {
+    if (window.speechSynthesis) {
+      const load = () => window.speechSynthesis.getVoices();
+      load();
+      window.speechSynthesis.onvoiceschanged = load;
+      return () => { window.speechSynthesis.onvoiceschanged = null; };
     }
-    if (blobUrlRef.current) {
-      URL.revokeObjectURL(blobUrlRef.current);
-      blobUrlRef.current = null;
+  }, []);
+
+  const stop = () => {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
     }
     setStatus("idle");
   };
 
-  // ── Play / pause handler ──────────────────────────────────────────────────
   const handlePlay = async () => {
-    if (audioRef.current) {
-      if (status === "playing") { audioRef.current.pause(); setStatus("paused"); return; }
-      if (status === "paused")  { audioRef.current.play();  setStatus("playing"); return; }
+    if (status === "playing") {
+      window.speechSynthesis.pause();
+      setStatus("paused");
+      return;
+    }
+    if (status === "paused") {
+      window.speechSynthesis.resume();
+      setStatus("playing");
+      return;
     }
     if (status === "loading") return;
 
     setStatus("loading");
+    
+    // Unlock speech
+    if (window.speechSynthesis) {
+      const u = new SpeechSynthesisUtterance(" ");
+      window.speechSynthesis.speak(u);
+    }
+
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(`${BASE_URL}/api/voice/summary`, {
@@ -1257,24 +1269,59 @@ function VoiceButton({ data, C }) {
         },
         body: JSON.stringify({ data, lang }),
       });
+      
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
         throw new Error(j.error || `Server error ${res.status}`);
       }
-      const blob = await res.blob();
-      const url  = URL.createObjectURL(blob);
-      blobUrlRef.current = url;
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        blobUrlRef.current = null;
-        audioRef.current   = null;
-        setStatus("idle");
+      
+      const json = await res.json();
+      const script = json.script;
+
+      if (!window.speechSynthesis) throw new Error("TTS not supported in browser");
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(script);
+      utterance.lang = lang === "hi" ? "hi-IN" : "en-US";
+      utterance.rate = 0.95;
+
+      const trySpeak = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length === 0) {
+          window.speechSynthesis.onvoiceschanged = () => {
+            window.speechSynthesis.onvoiceschanged = null;
+            trySpeak();
+          };
+          return;
+        }
+
+        let selectedVoice;
+        if (lang === "hi") {
+          selectedVoice =
+            voices.find(v => v.lang === "hi-IN" && v.name.includes("Ananya")) ||
+            voices.find(v => v.lang === "hi-IN") ||
+            voices.find(v => v.lang.startsWith("hi"));
+        } else {
+          selectedVoice =
+            voices.find(v => v.lang === "en-IN") ||
+            voices.find(v => v.lang === "en-US") ||
+            voices.find(v => v.lang.startsWith("en"));
+        }
+        if (selectedVoice) utterance.voice = selectedVoice;
+
+        utterance.onend = () => setStatus("idle");
+        utterance.onerror = (e) => {
+          console.warn("TTS Error:", e);
+          setStatus("error");
+          setTimeout(() => setStatus("idle"), 3500);
+        };
+        
+        window.speechSynthesis.speak(utterance);
+        setStatus("playing");
       };
-      audio.onerror = () => setStatus("error");
-      await audio.play();
-      setStatus("playing");
+
+      trySpeak();
+
     } catch (e) {
       console.error("[VoiceButton]", e);
       setStatus("error");
@@ -1282,7 +1329,6 @@ function VoiceButton({ data, C }) {
     }
   };
 
-  // ── Toggle language — stop current audio ─────────────────────────────────
   const toggleLang = () => { stop(); setLang(l => l === "en" ? "hi" : "en"); };
 
   const isActive  = status === "playing" || status === "paused";
@@ -1372,7 +1418,7 @@ function LegalSection({ C }) {
           ⚖️ Legal Assistant
         </h2>
         <div style={{ borderRadius: 16, overflow: "hidden", border: `1px solid ${C.border}` }}>
-          <LegalPage />
+          <LegalPage C={C} />
         </div>
       </div>
     </section>
@@ -2108,6 +2154,37 @@ export default function App() {
 
   const API_URL =
   import.meta.env.VITE_API_BASE_URL || "https://sakshya-backend.onrender.com";
+
+  // Check if user is already logged in on mount
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+    window.scrollTo(0, 0);
+
+    const token = localStorage.getItem("token");
+    if (token) {
+      fetch(`${API_URL}/auth/profile`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => {
+        if (!res.ok) throw new Error("Invalid token");
+        return res.json();
+      })
+      .then(data => {
+        if (data.user) {
+          setUser(data.user);
+        } else {
+          localStorage.removeItem("token");
+        }
+      })
+      .catch(err => {
+        console.error("Profile fetch error:", err);
+        localStorage.removeItem("token");
+      });
+    }
+  }, [API_URL]);
+
    // 🔹 Google login handler FIRST
   const handleCredentialResponse = useCallback(async (response) => {
   try {
@@ -2118,12 +2195,14 @@ export default function App() {
     });
 
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
+    if (!res.ok) throw new Error(data.error || "Login failed on server");
 
     localStorage.setItem("token", data.token); // ← store app JWT
     setUser(data.user);
+    setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 100);
   } catch (e) {
     console.error("Login failed:", e.message);
+    alert("Login failed: " + e.message);
   }
 }, [API_URL]);
 
