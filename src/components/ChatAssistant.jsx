@@ -26,50 +26,86 @@ const SpeechRecognition =
 
 // ✅ FIX 1: Voices are loaded asynchronously — always call getVoices() inside
 //           a trySpeak() that waits for onvoiceschanged if the list is empty.
-function speak(text, lang = "en") {
-  if (!window.speechSynthesis) return;
+// Ensure utterances are not garbage collected
+window.__tts_utterances = window.__tts_utterances || [];
+
+function speak(text, lang = "en", onEnd = () => {}) {
+  if (!window.speechSynthesis || !text) {
+    onEnd();
+    return;
+  }
 
   const synth = window.speechSynthesis;
   synth.cancel();
+  window.__tts_utterances = []; // clear old references
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang  = lang === "hi" ? "hi-IN" : "en-US";
-  utterance.rate  = 0.95;
+  // Clean markdown symbols
+  const cleanText = text.replace(/[*#_`~]/g, '');
 
-  const trySpeak = () => {
+  // Split text into chunks to prevent silent failure on long texts
+  const chunks = cleanText.match(/[^.!?\n]+[.!?\n]*/g) || [cleanText];
+
+  const doSpeak = () => {
     const voices = synth.getVoices();
 
-    if (voices.length === 0) {
-      // Voices not ready yet — wait for the browser to load them
-      synth.onvoiceschanged = () => {
-        synth.onvoiceschanged = null;
-        trySpeak();
-      };
-      return;
-    }
-
     let selectedVoice;
-    if (lang === "hi") {
-      selectedVoice =
-        voices.find(v => v.lang === "hi-IN" && v.name.includes("Ananya")) ||
-        voices.find(v => v.lang === "hi-IN") ||
-        voices.find(v => v.lang.startsWith("hi"));
-    } else {
-      selectedVoice =
-        voices.find(v => v.lang === "en-IN") ||
-        voices.find(v => v.lang === "en-US") ||
-        voices.find(v => v.lang.startsWith("en"));
+    if (voices.length > 0) {
+      if (lang === "hi") {
+        selectedVoice =
+          voices.find(v => v.lang === "hi-IN" && v.name.includes("Ananya")) ||
+          voices.find(v => v.lang === "hi-IN") ||
+          voices.find(v => v.lang.startsWith("hi"));
+      } else {
+        selectedVoice =
+          voices.find(v => v.lang === "en-IN") ||
+          voices.find(v => v.lang === "en-US") ||
+          voices.find(v => v.lang.startsWith("en"));
+      }
     }
 
-    if (selectedVoice) utterance.voice = selectedVoice;
-
-    // ✅ FIX 2: No more recursive retry on error — just log it cleanly
-    utterance.onerror = (e) => console.warn("TTS error:", e.error);
-
-    synth.speak(utterance);
+    chunks.forEach((chunk, index) => {
+      const trimmed = chunk.trim();
+      if (!trimmed) {
+        if (index === chunks.length - 1) onEnd();
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(trimmed);
+      utterance.lang  = lang === "hi" ? "hi-IN" : "en-US";
+      utterance.rate  = 0.95;
+      if (selectedVoice) utterance.voice = selectedVoice;
+      
+      if (index === chunks.length - 1) {
+        utterance.onend = onEnd;
+      }
+      
+      utterance.onerror = (e) => {
+        console.warn("TTS error:", e.error);
+        if (index === chunks.length - 1) onEnd();
+      };
+      
+      window.__tts_utterances.push(utterance); // Prevent GC
+      synth.speak(utterance);
+    });
   };
 
-  trySpeak();
+  if (synth.getVoices().length === 0) {
+    let hasSpoken = false;
+    synth.onvoiceschanged = () => {
+      if (hasSpoken) return;
+      hasSpoken = true;
+      synth.onvoiceschanged = null;
+      doSpeak();
+    };
+    // Failsafe: if event doesn't fire in 500ms, try anyway
+    setTimeout(() => {
+      if (!hasSpoken) {
+        hasSpoken = true;
+        doSpeak();
+      }
+    }, 500);
+  } else {
+    doSpeak();
+  }
 }
 
 let speechUnlocked = false;
@@ -101,7 +137,7 @@ export default function ChatAssistant({ judgmentData, C }) {
   const [input,      setInput]      = useState("");
   const [loading,    setLoading]    = useState(false);
   const [listening,  setListening]  = useState(false);
-  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [ttsStatus,  setTtsStatus]  = useState("idle"); // "idle", "playing", "paused"
   const [error,      setError]      = useState("");
   const [lastFailed, setLastFailed] = useState(null);
   const [lang,       setLang]       = useState("en");
@@ -185,8 +221,7 @@ export default function ChatAssistant({ judgmentData, C }) {
       const assistantMsg = { role: "assistant", content: json.reply, ts: Date.now() };
       setMessages(prev => [...prev, assistantMsg]);
 
-      // ✅ FIX 3: No arbitrary 800ms delay — speak immediately after reply arrives
-      if (ttsEnabled) speak(json.reply, lang);
+      // Auto-speak removed, user will click the button to play the message
 
     } catch (err) {
       setMessages(prev => prev.slice(0, -1));
@@ -200,7 +235,7 @@ export default function ChatAssistant({ judgmentData, C }) {
     }
 
   // ✅ FIX 4: Removed voicesLoaded from deps — it was unused inside and caused stale closures
-  }, [input, loading, messages, judgmentData, ttsEnabled, lang]);
+  }, [input, loading, messages, judgmentData, ttsStatus, lang]);
 
   // ─── voice input ───────────────────────────────────────────────────────────
   const toggleVoiceInput = useCallback(() => {
@@ -322,15 +357,29 @@ export default function ChatAssistant({ judgmentData, C }) {
 
             {/* TTS toggle */}
             <button
-              onClick={() => setTtsEnabled(t => !t)}
-              title={ttsEnabled ? "Disable voice output" : "Enable voice output"}
-              style={{
-                background: ttsEnabled ? `${accent}30` : "transparent",
-                border: `1px solid ${ttsEnabled ? accent : border}`,
-                borderRadius: 8, padding: "4px 8px", cursor: "pointer",
-                color: ttsEnabled ? accent : textM, fontSize: 14,
+              onClick={() => {
+                if (ttsStatus === "playing") {
+                  window.speechSynthesis.pause();
+                  setTtsStatus("paused");
+                } else if (ttsStatus === "paused") {
+                  window.speechSynthesis.resume();
+                  setTtsStatus("playing");
+                } else {
+                  const lastMsg = [...messages].reverse().find(m => m.role === "assistant");
+                  if (lastMsg) {
+                    setTtsStatus("playing");
+                    speak(lastMsg.content, lang, () => setTtsStatus("idle"));
+                  }
+                }
               }}
-            >🔊</button>
+              title={ttsStatus === "playing" ? "Pause" : ttsStatus === "paused" ? "Resume" : "Play last message"}
+              style={{
+                background: ttsStatus !== "idle" ? `${accent}30` : "transparent",
+                border: `1px solid ${ttsStatus !== "idle" ? accent : border}`,
+                borderRadius: 8, padding: "4px 8px", cursor: "pointer",
+                color: ttsStatus !== "idle" ? accent : textM, fontSize: 14,
+              }}
+            >{ttsStatus === "playing" ? "⏸" : ttsStatus === "paused" ? "▶️" : "🔊"}</button>
 
             {/* Language toggle */}
             <button

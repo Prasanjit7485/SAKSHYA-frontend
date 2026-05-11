@@ -18,46 +18,86 @@ const SpeechRecognition =
     ? window.SpeechRecognition || window.webkitSpeechRecognition
     : null;
 
-function speak(text, lang = "en") {
-  if (!window.speechSynthesis) return;
+// Ensure utterances are not garbage collected
+window.__tts_utterances = window.__tts_utterances || [];
+
+function speak(text, lang = "en", onEnd = () => {}) {
+  if (!window.speechSynthesis || !text) {
+    onEnd();
+    return;
+  }
 
   const synth = window.speechSynthesis;
   synth.cancel();
+  window.__tts_utterances = []; // clear old references
 
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang  = lang === "hi" ? "hi-IN" : "en-US";
-  utterance.rate  = 0.95;
+  // Clean markdown symbols
+  const cleanText = text.replace(/[*#_`~]/g, '');
 
-  const trySpeak = () => {
+  // Split text into chunks to prevent silent failure on long texts
+  const chunks = cleanText.match(/[^.!?\n]+[.!?\n]*/g) || [cleanText];
+
+  const doSpeak = () => {
     const voices = synth.getVoices();
 
-    if (voices.length === 0) {
-      synth.onvoiceschanged = () => {
-        synth.onvoiceschanged = null;
-        trySpeak();
-      };
-      return;
-    }
-
     let selectedVoice;
-    if (lang === "hi") {
-      selectedVoice =
-        voices.find(v => v.lang === "hi-IN" && v.name.includes("Ananya")) ||
-        voices.find(v => v.lang === "hi-IN") ||
-        voices.find(v => v.lang.startsWith("hi"));
-    } else {
-      selectedVoice =
-        voices.find(v => v.lang === "en-IN") ||
-        voices.find(v => v.lang === "en-US") ||
-        voices.find(v => v.lang.startsWith("en"));
+    if (voices.length > 0) {
+      if (lang === "hi") {
+        selectedVoice =
+          voices.find(v => v.lang === "hi-IN" && v.name.includes("Ananya")) ||
+          voices.find(v => v.lang === "hi-IN") ||
+          voices.find(v => v.lang.startsWith("hi"));
+      } else {
+        selectedVoice =
+          voices.find(v => v.lang === "en-IN") ||
+          voices.find(v => v.lang === "en-US") ||
+          voices.find(v => v.lang.startsWith("en"));
+      }
     }
 
-    if (selectedVoice) utterance.voice = selectedVoice;
-    utterance.onerror = (e) => console.warn("TTS error:", e.error);
-    synth.speak(utterance);
+    chunks.forEach((chunk, index) => {
+      const trimmed = chunk.trim();
+      if (!trimmed) {
+        if (index === chunks.length - 1) onEnd();
+        return;
+      }
+      const utterance = new SpeechSynthesisUtterance(trimmed);
+      utterance.lang  = lang === "hi" ? "hi-IN" : "en-US";
+      utterance.rate  = 0.95;
+      if (selectedVoice) utterance.voice = selectedVoice;
+      
+      if (index === chunks.length - 1) {
+        utterance.onend = onEnd;
+      }
+      
+      utterance.onerror = (e) => {
+        console.warn("TTS error:", e.error);
+        if (index === chunks.length - 1) onEnd();
+      };
+      
+      window.__tts_utterances.push(utterance); // Prevent GC
+      synth.speak(utterance);
+    });
   };
 
-  trySpeak();
+  if (synth.getVoices().length === 0) {
+    let hasSpoken = false;
+    synth.onvoiceschanged = () => {
+      if (hasSpoken) return;
+      hasSpoken = true;
+      synth.onvoiceschanged = null;
+      doSpeak();
+    };
+    // Failsafe: if event doesn't fire in 500ms, try anyway
+    setTimeout(() => {
+      if (!hasSpoken) {
+        hasSpoken = true;
+        doSpeak();
+      }
+    }, 500);
+  } else {
+    doSpeak();
+  }
 }
 
 let speechUnlocked = false;
@@ -96,7 +136,7 @@ export default function LegalPage({ C }) {
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const [lang, setLang] = useState("en");
-  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [ttsStatus, setTtsStatus] = useState("idle");
 
   const recognizerRef = useRef(null);
   const chatContainerRef = useRef(null);
@@ -202,9 +242,7 @@ export default function LegalPage({ C }) {
       const botMsg = { role: "assistant", content: reply };
       setMessages((prev) => [...prev, botMsg]);
 
-      if (ttsEnabled) {
-        speak(reply, lang);
-      }
+      // Auto-speak removed, user will click the button to play the message
     } catch (err) {
       console.error(err);
       setMessages((prev) => [
@@ -252,16 +290,30 @@ export default function LegalPage({ C }) {
         <div style={{ display: "flex", gap: 8 }}>
           {/* TTS toggle */}
           <button
-            onClick={() => setTtsEnabled(t => !t)}
-            title={ttsEnabled ? "Disable voice output" : "Enable voice output"}
+            onClick={() => {
+              if (ttsStatus === "playing") {
+                window.speechSynthesis.pause();
+                setTtsStatus("paused");
+              } else if (ttsStatus === "paused") {
+                window.speechSynthesis.resume();
+                setTtsStatus("playing");
+              } else {
+                const lastMsg = [...messages].reverse().find(m => m.role === "assistant");
+                if (lastMsg) {
+                  setTtsStatus("playing");
+                  speak(lastMsg.content, lang, () => setTtsStatus("idle"));
+                }
+              }
+            }}
+            title={ttsStatus === "playing" ? "Pause" : ttsStatus === "paused" ? "Resume" : "Play last message"}
             style={{
-              background: ttsEnabled ? `${C.accent}30` : "transparent",
-              border: `1px solid ${ttsEnabled ? C.accent : C.border}`,
+              background: ttsStatus !== "idle" ? `${C.accent}30` : "transparent",
+              border: `1px solid ${ttsStatus !== "idle" ? C.accent : C.border}`,
               borderRadius: 8, padding: "6px 10px", cursor: "pointer",
-              color: ttsEnabled ? C.accent : C.textMuted, fontSize: 14,
+              color: ttsStatus !== "idle" ? C.accent : C.textMuted, fontSize: 14,
               transition: "all 0.2s"
             }}
-          >🔊</button>
+          >{ttsStatus === "playing" ? "⏸" : ttsStatus === "paused" ? "▶️" : "🔊"}</button>
 
           {/* Lang toggle */}
           <button
