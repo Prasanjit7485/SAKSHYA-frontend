@@ -1281,46 +1281,72 @@ function VoiceButton({ data, C }) {
       if (!window.speechSynthesis) throw new Error("TTS not supported in browser");
 
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(script);
-      utterance.lang = lang === "hi" ? "hi-IN" : "en-US";
-      utterance.rate = 0.95;
+      window.__tts_utterances = []; // clear old references
 
-      const trySpeak = () => {
+      const cleanScript = script.replace(/[*#_`~]/g, '');
+      const chunks = cleanScript.match(/[^.!?\n]+[.!?\n]*/g) || [cleanScript];
+
+      const doSpeak = () => {
         const voices = window.speechSynthesis.getVoices();
-        if (voices.length === 0) {
-          window.speechSynthesis.onvoiceschanged = () => {
-            window.speechSynthesis.onvoiceschanged = null;
-            trySpeak();
-          };
-          return;
-        }
-
-        let selectedVoice;
-        if (lang === "hi") {
-          selectedVoice =
-            voices.find(v => v.lang === "hi-IN" && v.name.includes("Ananya")) ||
-            voices.find(v => v.lang === "hi-IN") ||
-            voices.find(v => v.lang.startsWith("hi"));
-        } else {
-          selectedVoice =
-            voices.find(v => v.lang === "en-IN") ||
-            voices.find(v => v.lang === "en-US") ||
-            voices.find(v => v.lang.startsWith("en"));
-        }
-        if (selectedVoice) utterance.voice = selectedVoice;
-
-        utterance.onend = () => setStatus("idle");
-        utterance.onerror = (e) => {
-          console.warn("TTS Error:", e);
-          setStatus("error");
-          setTimeout(() => setStatus("idle"), 3500);
-        };
         
-        window.speechSynthesis.speak(utterance);
-        setStatus("playing");
+        let selectedVoice;
+        if (voices.length > 0) {
+          if (lang === "hi") {
+            selectedVoice =
+              voices.find(v => v.lang === "hi-IN" && v.name.includes("Ananya")) ||
+              voices.find(v => v.lang === "hi-IN") ||
+              voices.find(v => v.lang.startsWith("hi"));
+          } else {
+            selectedVoice =
+              voices.find(v => v.lang === "en-IN") ||
+              voices.find(v => v.lang === "en-US") ||
+              voices.find(v => v.lang.startsWith("en"));
+          }
+        }
+
+        chunks.forEach((chunk, index) => {
+          const trimmed = chunk.trim();
+          if (!trimmed) return;
+          const utterance = new SpeechSynthesisUtterance(trimmed);
+          utterance.lang = lang === "hi" ? "hi-IN" : "en-US";
+          utterance.rate = 0.95;
+          if (selectedVoice) utterance.voice = selectedVoice;
+
+          if (index === chunks.length - 1) {
+            utterance.onend = () => setStatus("idle");
+          }
+          
+          utterance.onerror = (e) => {
+            console.warn("TTS Error:", e);
+            setStatus("error");
+            setTimeout(() => setStatus("idle"), 3500);
+          };
+          
+          window.__tts_utterances.push(utterance);
+          window.speechSynthesis.speak(utterance);
+        });
+        
+        if (chunks.length > 0) setStatus("playing");
+        else setStatus("idle");
       };
 
-      trySpeak();
+      if (window.speechSynthesis.getVoices().length === 0) {
+        let hasSpoken = false;
+        window.speechSynthesis.onvoiceschanged = () => {
+          if (hasSpoken) return;
+          hasSpoken = true;
+          window.speechSynthesis.onvoiceschanged = null;
+          doSpeak();
+        };
+        setTimeout(() => {
+          if (!hasSpoken) {
+            hasSpoken = true;
+            doSpeak();
+          }
+        }, 500);
+      } else {
+        doSpeak();
+      }
 
     } catch (e) {
       console.error("[VoiceButton]", e);
