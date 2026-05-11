@@ -206,6 +206,8 @@ export default function LegalPage({ C }) {
     if (!text || loading) return;
 
     unlockSpeech();
+    window.speechSynthesis.cancel();
+    setTtsStatus("idle");
 
     const userMsg = { role: "user", content: text };
     const nextMessages = [...messages, userMsg];

@@ -188,6 +188,9 @@ export default function ChatAssistant({ judgmentData, C }) {
 
     setError("");
     setLastFailed(null);
+    
+    window.speechSynthesis.cancel();
+    setTtsStatus("idle");
 
     const userMsg     = { role: "user", content: trimmed, ts: Date.now() };
     const nextMessages = [...messages, userMsg];
